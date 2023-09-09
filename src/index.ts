@@ -1,16 +1,6 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
 export interface Env {
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
+	view_counter: KVNamespace;
 	//
 	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
 	// MY_DURABLE_OBJECT: DurableObjectNamespace;
@@ -25,8 +15,63 @@ export interface Env {
 	// MY_QUEUE: Queue;
 }
 
+// @ts-ignore
+import home from './home.html';
+
+function handleHome() {
+	return new Response(home, {
+		headers: {
+			'Content-Type': 'text/html;charset=utf-8',
+		},
+	});
+}
+
+function handleNotFound() {
+	return new Response(null, {
+		status: 404,
+	});
+}
+
+function handleBadRequest() {
+	return new Response(null, {
+		status: 400,
+	});
+}
+
+async function handleVisit(searchParams: URLSearchParams, env: Env) {
+	const page = searchParams.get('page');
+
+	if (!page) {
+		return handleBadRequest();
+	}
+
+	const kvPage = await env.view_counter.get(page);
+	let value = 1;
+	if (!kvPage) {
+		await env.view_counter.put(page, value.toString());
+	} else {
+		value = parseInt(kvPage) + 1;
+		await env.view_counter.put(page, value.toString());
+	}
+
+	return new Response(JSON.stringify({ visits: value }), {
+		headers: {
+			'Content-Type': 'application/json',
+		},
+	});
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+		const { pathname, searchParams } = new URL(request.url);
+
+		switch (pathname) {
+			case '/':
+				return handleHome();
+			case '/visit':
+				return handleVisit(searchParams, env);
+			default:
+				return handleNotFound();
+		}
 	},
 };
